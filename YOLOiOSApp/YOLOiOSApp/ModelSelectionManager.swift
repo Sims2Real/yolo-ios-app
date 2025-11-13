@@ -26,6 +26,11 @@ struct ModelSelectionManager {
     let size: ModelSize?
   }
 
+  struct ModelCategories {
+    let standardModels: [ModelSize: ModelInfo]
+    let customModels: [ModelInfo]
+  }
+
   private static let modelSizeRegex: NSRegularExpression = {
     do {
       return try NSRegularExpression(pattern: "^\\d+([nsmxl])", options: [])
@@ -36,30 +41,49 @@ struct ModelSelectionManager {
   }()
 
   static func categorizeModels(from models: [(name: String, url: URL?, isLocal: Bool)])
-    -> [ModelSize: ModelInfo]
+    -> ModelCategories
   {
     var standardModels: [ModelSize: ModelInfo] = [:]
+    var customModels: [ModelInfo] = []
 
+    print("Categorizing \(models.count) models:")
     for model in models {
       let baseName = (model.name as NSString).deletingPathExtension.lowercased()
+      print("  - \(model.name) -> baseName: \(baseName)")
 
-      if baseName.hasPrefix("yolo") {
+      // Local models from folder are always customModels - no size extraction needed
+      if model.isLocal {
+        print("    -> Local model, adding to customModels")
+        customModels.append(ModelInfo(
+          name: model.name,
+          url: model.url,
+          isLocal: model.isLocal,
+          size: nil
+        ))
+      } else {
+        // Remote models: only add to standardModels if they match size pattern
+        // Remote models that don't match are not shown (not added to customModels)
         let sizeChar = extractSizeFromModelName(baseName)
 
         if let char = sizeChar,
           let size = ModelSize(rawValue: String(char))
         {
+          print("    -> Standard model: \(size)")
           standardModels[size] = ModelInfo(
             name: model.name,
             url: model.url,
             isLocal: model.isLocal,
             size: size
           )
+        } else {
+          // Remote model doesn't match standard pattern - skip it (don't add to customModels)
+          print("    -> Remote model doesn't match standard pattern, skipping")
         }
       }
     }
 
-    return standardModels
+    print("Result: \(standardModels.count) standard models, \(customModels.count) custom models")
+    return ModelCategories(standardModels: standardModels, customModels: customModels)
   }
 
   private static func extractSizeFromModelName(_ baseName: String) -> Character? {
@@ -73,18 +97,21 @@ struct ModelSelectionManager {
       }
     }
 
-    if nameWithoutSuffix.hasPrefix("yolo") && !nameWithoutSuffix.dropFirst(4).isEmpty {
-      let afterYolo = nameWithoutSuffix.dropFirst(4)
-      let afterYoloString = String(afterYolo)
-      let range = NSRange(location: 0, length: afterYoloString.count)
+    // Remove "yolo" prefix if present to get to the version+size part (e.g., "11n" from "yolo11n")
+    var nameToMatch = nameWithoutSuffix
+    if nameWithoutSuffix.lowercased().hasPrefix("yolo") {
+      nameToMatch = String(nameWithoutSuffix.dropFirst(4))
+    }
 
-      if let match = modelSizeRegex.firstMatch(in: afterYoloString, options: [], range: range),
-        match.numberOfRanges > 1
-      {
-        let sizeRange = match.range(at: 1)
-        if let range = Range(sizeRange, in: afterYoloString) {
-          return afterYoloString[range].first
-        }
+    // Try to match the size pattern (digits followed by size char like "11n", "8s")
+    let range = NSRange(location: 0, length: nameToMatch.count)
+
+    if let match = modelSizeRegex.firstMatch(in: nameToMatch, options: [], range: range),
+      match.numberOfRanges > 1
+    {
+      let sizeRange = match.range(at: 1)
+      if let range = Range(sizeRange, in: nameToMatch) {
+        return nameToMatch[range].first
       }
     }
 
@@ -111,7 +138,7 @@ struct ModelSelectionManager {
   }
 
   static func setupSegmentedControl(
-    _ control: UISegmentedControl, standardModels: [ModelSize: ModelInfo], currentTask: YOLOTask,
+    _ control: UISegmentedControl, modelCategories: ModelCategories, currentTask: YOLOTask,
     preserveSelection: Bool = false
   ) {
     let previousSelection = preserveSelection ? control.selectedSegmentIndex : -1
@@ -119,7 +146,7 @@ struct ModelSelectionManager {
     control.removeAllSegments()
 
     for (index, size) in ModelSize.allCases.enumerated() {
-      if let model = standardModels[size] {
+      if let model = modelCategories.standardModels[size] {
         let fullName = (model.name as NSString).deletingPathExtension
         let displayTitle = removeTaskSuffix(from: fullName)
 
@@ -156,17 +183,17 @@ struct ModelSelectionManager {
     control.layoutIfNeeded()
 
     DispatchQueue.main.async {
-      updateSegmentAppearance(control, standardModels: standardModels, currentTask: currentTask)
+      updateSegmentAppearance(control, modelCategories: modelCategories, currentTask: currentTask)
     }
   }
 
   static func updateSegmentAppearance(
-    _ control: UISegmentedControl, standardModels: [ModelSize: ModelInfo], currentTask: YOLOTask
+    _ control: UISegmentedControl, modelCategories: ModelCategories, currentTask: YOLOTask
   ) {
     for (index, size) in ModelSize.allCases.enumerated() {
       guard index < control.numberOfSegments else { break }
 
-      if let model = standardModels[size] {
+      if let model = modelCategories.standardModels[size] {
         // Check if model is downloaded using ModelCacheManager for remote models
         // Use the model name without extension as the key (e.g., "yolo11n", "yolo11m-seg")
         let modelKey = (model.name as NSString).deletingPathExtension

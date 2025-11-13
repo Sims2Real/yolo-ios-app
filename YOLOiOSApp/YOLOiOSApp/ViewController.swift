@@ -115,8 +115,8 @@ class ViewController: UIViewController, YOLOViewDelegate {
   private var modelsForTask: [String: [String]] = [:]
 
   var currentModels: [ModelEntry] = []
-  private var standardModels: [ModelSelectionManager.ModelSize: ModelSelectionManager.ModelInfo] =
-    [:]
+  private var modelCategories: ModelSelectionManager.ModelCategories =
+    ModelSelectionManager.ModelCategories(standardModels: [:], customModels: [])
 
   var currentTask: String = ""
   var currentModelName: String = ""
@@ -240,42 +240,53 @@ class ViewController: UIViewController, YOLOViewDelegate {
       let fileURLs = try? FileManager.default.contentsOfDirectory(
         at: folderURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
       )
-    else { return [] }
+    else {
+      print("Could not find folder: \(folderName)")
+      return []
+    }
+
+    print("Found \(fileURLs.count) files in \(folderName):")
+    for url in fileURLs {
+      print("  - \(url.lastPathComponent) (extension: \(url.pathExtension))")
+    }
 
     let modelFiles =
       fileURLs
       .filter { ["mlmodel", "mlpackage"].contains($0.pathExtension) }
       .map { $0.lastPathComponent }
 
+    print("Filtered to \(modelFiles.count) model files: \(modelFiles)")
+
     return folderName == "DetectModels" ? reorderDetectionModels(modelFiles) : modelFiles.sorted()
   }
 
   private func reorderDetectionModels(_ fileNames: [String]) -> [String] {
-    let order: [Character: Int] = ["n": 0, "m": 1, "s": 2, "l": 3, "x": 4]
-    let (official, custom) = fileNames.reduce(into: ([String](), [String]())) { result, name in
-      let base = (name as NSString).deletingPathExtension.lowercased()
-      base.hasPrefix("yolo") && order[base.last ?? "z"] != nil
-        ? result.0.append(name) : result.1.append(name)
-    }
-    return custom.sorted()
-      + official.sorted {
-        order[($0 as NSString).deletingPathExtension.lowercased().last ?? "z"] ?? 99 < order[
-          ($1 as NSString).deletingPathExtension.lowercased().last ?? "z"] ?? 99
-      }
+    // Simply return all models sorted - no filtering needed
+    // All models will be included and categorized by ModelSelectionManager
+    return fileNames.sorted()
   }
 
   private func reloadModelEntriesAndLoadFirst(for taskName: String) {
     currentModels = makeModelEntries(for: taskName)
     let modelTuples = currentModels.map { ($0.identifier, $0.remoteURL, $0.isLocalBundle) }
-    standardModels = ModelSelectionManager.categorizeModels(from: modelTuples)
+    modelCategories = ModelSelectionManager.categorizeModels(from: modelTuples)
 
     let yoloTask = tasks.first(where: { $0.name == taskName })?.yoloTask ?? .detect
     ModelSelectionManager.setupSegmentedControl(
-      modelSegmentedControl, standardModels: standardModels, currentTask: yoloTask)
+      modelSegmentedControl, modelCategories: modelCategories, currentTask: yoloTask)
+
+    // Load first available model (standard or custom)
+    var modelToLoad: ModelSelectionManager.ModelInfo? = nil
 
     if let firstSize = ModelSelectionManager.ModelSize.allCases.first,
-      let model = standardModels[firstSize]
+      let model = modelCategories.standardModels[firstSize]
     {
+      modelToLoad = model
+    } else if let firstCustom = modelCategories.customModels.first {
+      modelToLoad = firstCustom
+    }
+
+    if let model = modelToLoad {
       let entry = ModelEntry(
         displayName: (model.name as NSString).deletingPathExtension,
         identifier: model.name,
@@ -483,14 +494,14 @@ class ViewController: UIViewController, YOLOViewDelegate {
 
         ModelSelectionManager.setupSegmentedControl(
           self.modelSegmentedControl,
-          standardModels: self.standardModels,
+          modelCategories: self.modelCategories,
           currentTask: yoloTask,
           preserveSelection: true
         )
 
         ModelSelectionManager.updateSegmentAppearance(
           self.modelSegmentedControl,
-          standardModels: self.standardModels,
+          modelCategories: self.modelCategories,
           currentTask: yoloTask
         )
       }
@@ -618,7 +629,7 @@ class ViewController: UIViewController, YOLOViewDelegate {
   private func setupCustomModelButton() {
     customModelButton = UIButton(type: .system)
     customModelButton.setTitle("Custom", for: .normal)
-    customModelButton.titleLabel?.font = UIFont.systemFont(ofSize: 13)
+    customModelButton.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .medium)
     customModelButton.setTitleColor(.white, for: .normal)
     customModelButton.setTitleColor(.systemBlue, for: .selected)
     customModelButton.backgroundColor = .systemBackground.withAlphaComponent(0.1)
@@ -631,6 +642,14 @@ class ViewController: UIViewController, YOLOViewDelegate {
 
     View0.addSubview(customModelButton)
 
+    // Position button just under the top safe area
+    NSLayoutConstraint.activate([
+      customModelButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+      customModelButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+      customModelButton.heightAnchor.constraint(equalToConstant: 36),
+      customModelButton.widthAnchor.constraint(equalToConstant: 80),
+    ])
+
     modelSegmentedControl.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
       modelSegmentedControl.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
@@ -641,7 +660,43 @@ class ViewController: UIViewController, YOLOViewDelegate {
   // MARK: - Actions
   @objc func customModelButtonTapped() {
     selection.selectionChanged()
-    // Placeholder action for custom model selection; integrate picker if needed
+
+    let customModels = modelCategories.customModels
+    guard !customModels.isEmpty else {
+      let alert = UIAlertController(
+        title: "No Custom Models",
+        message: "No custom models found for the current task. Add models to the appropriate folder.",
+        preferredStyle: .alert
+      )
+      alert.addAction(UIAlertAction(title: "OK", style: .default))
+      present(alert, animated: true)
+      return
+    }
+
+    let alert = UIAlertController(title: "Select Custom Model", message: nil, preferredStyle: .actionSheet)
+
+    for model in customModels {
+      let displayName = (model.name as NSString).deletingPathExtension
+      let action = UIAlertAction(title: displayName, style: .default) { [weak self] _ in
+        self?.loadCustomModel(model)
+      }
+      alert.addAction(action)
+    }
+
+    alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+
+    present(alert, animated: true)
+  }
+
+  private func loadCustomModel(_ model: ModelSelectionManager.ModelInfo) {
+    let entry = ModelEntry(
+      displayName: (model.name as NSString).deletingPathExtension,
+      identifier: model.name,
+      isLocalBundle: model.isLocal,
+      isRemote: model.url != nil,
+      remoteURL: model.url
+    )
+    loadModel(entry: entry, forTask: currentTask)
   }
 
   func updateModelSegmentedControlAppearance() {
@@ -652,7 +707,7 @@ class ViewController: UIViewController, YOLOViewDelegate {
 
     let yoloTask = tasks.first(where: { $0.name == currentTask })?.yoloTask ?? .detect
     ModelSelectionManager.updateSegmentAppearance(
-      modelSegmentedControl, standardModels: standardModels, currentTask: yoloTask)
+      modelSegmentedControl, modelCategories: modelCategories, currentTask: yoloTask)
   }
 
   @objc private func modelSizeChanged(_ sender: UISegmentedControl) {
@@ -660,7 +715,7 @@ class ViewController: UIViewController, YOLOViewDelegate {
 
     if sender.selectedSegmentIndex < ModelSelectionManager.ModelSize.allCases.count {
       let size = ModelSelectionManager.ModelSize.allCases[sender.selectedSegmentIndex]
-      if let model = standardModels[size] {
+      if let model = modelCategories.standardModels[size] {
         let entry = ModelEntry(
           displayName: (model.name as NSString).deletingPathExtension,
           identifier: model.name,

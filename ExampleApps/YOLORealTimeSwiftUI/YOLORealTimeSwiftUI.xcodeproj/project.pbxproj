@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		7314328D2D36176800919FF7 /* YOLO in Frameworks */ = {isa = PBXBuildFile; productRef = 7314328C2D36176800919FF7 /* YOLO */; };
+		3C0F8381887F4E4AA9708FEA /* VisionCameraYolo.m in Sources */ = {isa = PBXBuildFile; fileRef = FB5E28622B2B476CB3407B03 /* VisionCameraYolo.m */; };
+		272BD80AAF1B4381BEBFEAEB /* VisionCameraYolo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D1F47632CC492C903EBF23 /* VisionCameraYolo.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -31,6 +33,8 @@
 		73B032032D2E560D0003DB69 /* YOLORealTimeSwiftUI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YOLORealTimeSwiftUI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		73B032132D2E56130003DB69 /* YOLORealTimeSwiftUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YOLORealTimeSwiftUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		73B0321D2D2E56130003DB69 /* YOLORealTimeSwiftUIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YOLORealTimeSwiftUIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FB5E28622B2B476CB3407B03 /* VisionCameraYolo.m */ = {isa = PBXFileReference; name = "VisionCameraYolo.m"; path = "VisionCameraYolo.m"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; explicitFileType = undefined; includeInIndex = 0; };
+		34D1F47632CC492C903EBF23 /* VisionCameraYolo.swift */ = {isa = PBXFileReference; name = "VisionCameraYolo.swift"; path = "VisionCameraYolo.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -84,6 +88,7 @@
 				73B032162D2E56130003DB69 /* YOLORealTimeSwiftUITests */,
 				73B032202D2E56130003DB69 /* YOLORealTimeSwiftUIUITests */,
 				73B032042D2E560D0003DB69 /* Products */,
+				405EE7008BB64C06A868B304 /* VisionCameraYolo */,
 			);
 			sourceTree = "<group>";
 		};
@@ -95,6 +100,16 @@
 				73B0321D2D2E56130003DB69 /* YOLORealTimeSwiftUIUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		405EE7008BB64C06A868B304 /* VisionCameraYolo */ = {
+			isa = PBXGroup;
+			children = (
+				FB5E28622B2B476CB3407B03 /* VisionCameraYolo.m */,
+				34D1F47632CC492C903EBF23 /* VisionCameraYolo.swift */,
+			);
+			name = VisionCameraYolo;
+			path = VisionCameraYolo;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -245,6 +260,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3C0F8381887F4E4AA9708FEA /* VisionCameraYolo.m in Sources */,
+				272BD80AAF1B4381BEBFEAEB /* VisionCameraYolo.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
