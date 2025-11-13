@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'YOLO'
-  s.version          = '1.0.0'
+  s.version          = '1.0.1'
   s.summary          = 'Ultralytics YOLO for iOS - Real-time object detection, segmentation, classification, and pose estimation'
 
   s.description      = <<-DESC

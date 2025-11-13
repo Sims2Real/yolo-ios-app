@@ -230,7 +230,8 @@ public class VideoCapture: NSObject, @unchecked Sendable {
       /// - Tag: MappingOrientation
       // The frame is always oriented based on the camera sensor,
       // so in most cases Vision needs to rotate it for the model to work as expected.
-      _ = CGImagePropertyOrientation.up
+      // _ = CGImagePropertyOrientation.up
+      let imageOrientation: CGImagePropertyOrientation = .up
       //            switch UIDevice.current.orientation {
       //            case .portrait:
       //                imageOrientation = .up
@@ -247,7 +248,7 @@ public class VideoCapture: NSObject, @unchecked Sendable {
       //                imageOrientation = .up
       //            }
 
-      predictor.predict(sampleBuffer: sampleBuffer, onResultsListener: self, onInferenceTime: self)
+      predictor.predict(sampleBuffer: sampleBuffer, onResultsListener: self, onInferenceTime: self, imageOrientation: imageOrientation)
       currentBuffer = nil
     }
   }
