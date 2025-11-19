@@ -156,9 +156,11 @@ public class ObjectDetector: BasePredictor, @unchecked Sendable {
     } catch {
       print(error)
     }
-    _ = Date().timeIntervalSince(start)
+    let inferenceTime = Date().timeIntervalSince(start)
+    self.t1 = inferenceTime
 
-    var result = YOLOResult(orig_shape: inputSize, boxes: boxes, speed: t1, names: labels)
+    var result = YOLOResult(
+      orig_shape: inputSize, boxes: boxes, speed: inferenceTime, names: labels)
     let annotatedImage = drawYOLODetections(on: image, result: result)
     result.annotatedImage = annotatedImage
 
