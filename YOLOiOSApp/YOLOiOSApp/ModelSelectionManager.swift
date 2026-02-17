@@ -35,7 +35,9 @@ struct ModelSelectionManager {
     do {
       return try NSRegularExpression(pattern: "^\\d+([nsmxl])", options: [])
     } catch {
+#if DEBUG
       print("Failed to create model size regex: \(error)")
+#endif
       return try! NSRegularExpression(pattern: "^$", options: [])
     }
   }()
@@ -46,14 +48,20 @@ struct ModelSelectionManager {
     var standardModels: [ModelSize: ModelInfo] = [:]
     var customModels: [ModelInfo] = []
 
+#if DEBUG
     print("Categorizing \(models.count) models:")
+#endif
     for model in models {
       let baseName = (model.name as NSString).deletingPathExtension.lowercased()
+#if DEBUG
       print("  - \(model.name) -> baseName: \(baseName)")
+#endif
 
       // Local models from folder are always customModels - no size extraction needed
       if model.isLocal {
+#if DEBUG
         print("    -> Local model, adding to customModels")
+#endif
         customModels.append(ModelInfo(
           name: model.name,
           url: model.url,
@@ -68,7 +76,9 @@ struct ModelSelectionManager {
         if let char = sizeChar,
           let size = ModelSize(rawValue: String(char))
         {
+#if DEBUG
           print("    -> Standard model: \(size)")
+#endif
           standardModels[size] = ModelInfo(
             name: model.name,
             url: model.url,
@@ -77,12 +87,16 @@ struct ModelSelectionManager {
           )
         } else {
           // Remote model doesn't match standard pattern - skip it (don't add to customModels)
+#if DEBUG
           print("    -> Remote model doesn't match standard pattern, skipping")
+#endif
         }
       }
     }
 
+#if DEBUG
     print("Result: \(standardModels.count) standard models, \(customModels.count) custom models")
+#endif
     return ModelCategories(standardModels: standardModels, customModels: customModels)
   }
 
@@ -151,7 +165,7 @@ struct ModelSelectionManager {
         let displayTitle = removeTaskSuffix(from: fullName)
 
         // Check if model is downloaded using ModelCacheManager for remote models
-        // Use the model name without extension as the key (e.g., "yolo11n", "yolo11m-seg")
+        // Use the model name without extension as the key (e.g., "yolo26n", "yolo26m-seg")
         let modelKey = (model.name as NSString).deletingPathExtension
         let isDownloaded =
           model.isLocal
@@ -195,7 +209,7 @@ struct ModelSelectionManager {
 
       if let model = modelCategories.standardModels[size] {
         // Check if model is downloaded using ModelCacheManager for remote models
-        // Use the model name without extension as the key (e.g., "yolo11n", "yolo11m-seg")
+        // Use the model name without extension as the key (e.g., "yolo26n", "yolo26m-seg")
         let modelKey = (model.name as NSString).deletingPathExtension
         let isDownloaded =
           model.isLocal
@@ -217,7 +231,6 @@ struct ModelSelectionManager {
   ) {
     if #available(iOS 13.0, *) {
       if let title = control.titleForSegment(at: index) {
-        let attributes: [NSAttributedString.Key: Any] = [.foregroundColor: color]
         control.setTitle(title, forSegmentAt: index)
 
         if let image = control.imageForSegment(at: index) {

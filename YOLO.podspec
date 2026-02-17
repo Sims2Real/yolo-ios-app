@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'YOLO'
-  s.version          = '1.0.1'
+  s.version          = '8.8.1.1'
   s.summary          = 'Ultralytics YOLO for iOS - Real-time object detection, segmentation, classification, and pose estimation'
 
   s.description      = <<-DESC
@@ -9,10 +9,10 @@ Pod::Spec.new do |s|
   Optimized for Apple Silicon with CoreML integration for maximum performance.
                        DESC
 
-  s.homepage         = 'https://github.com/ultralytics/yolo-ios-app'
+  s.homepage         = 'https://github.com/Sims2Real/yolo-ios-app'
   s.license          = { :type => 'AGPL-3.0', :file => 'LICENSE' }
   s.author           = { 'Ultralytics' => 'hello@ultralytics.com' }
-  s.source           = { :git => 'https://github.com/ultralytics/yolo-ios-app.git', :tag => s.version.to_s }
+  s.source           = { :git => 'https://github.com/Sims2Real/yolo-ios-app.git', :tag => "v#{s.version}" }
 
   s.ios.deployment_target = '16.0'
   s.swift_version = '5.10'

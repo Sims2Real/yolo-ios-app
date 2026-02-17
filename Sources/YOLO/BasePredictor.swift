@@ -39,6 +39,9 @@ public class BasePredictor: Predictor, @unchecked Sendable {
   /// The class labels used by the model for categorizing detections.
   public var labels = [String]()
 
+  /// Whether the model requires NMS post-processing (false for YOLO26 nms-free models).
+  public private(set) var requiresNMS: Bool = true
+
   /// The current pixel buffer being processed (used for camera frame processing).
   var currentBuffer: CVPixelBuffer?
 
@@ -67,7 +70,7 @@ public class BasePredictor: Predictor, @unchecked Sendable {
   var t3 = CACurrentMediaTime()  // FPS start
 
   /// Smoothed frames per second measurement (averaged over recent frames).
-  var t4 = 0.0  // FPS dt smoothed
+  var t4 = 1.0  // FPS dt smoothed (non-zero to avoid infinity on first frame)
 
   /// Flag indicating whether the predictor is currently processing an update.
   public var isUpdating: Bool = false
@@ -114,8 +117,15 @@ public class BasePredictor: Predictor, @unchecked Sendable {
         let ext = unwrappedModelURL.pathExtension.lowercased()
         let isCompiled = (ext == "mlmodelc")
         let config = MLModelConfiguration()
-        // Fix for CoreML MLE5Engine issue on macOS 15
-        config.setValue(1, forKey: "experimentalMLE5EngineUsage")
+
+        // Configure compute units for optimal performance
+        // Use Neural Engine when available for best performance and power efficiency
+        config.computeUnits = .all  // Use CPU, GPU, and Neural Engine
+
+        // Alternative options:
+        // config.computeUnits = .cpuAndNeuralEngine  // CPU + ANE only
+        // config.computeUnits = .cpuAndGPU           // CPU + GPU only
+        // config.computeUnits = .cpuOnly             // CPU only
 
         let mlModel: MLModel
         if isCompiled {
@@ -159,12 +169,19 @@ public class BasePredictor: Predictor, @unchecked Sendable {
             ])
         }
 
+        // Detect NMS-free models (YOLO26 support)
+        if let nmsValue = userDefined["nms"] {
+          predictor.requiresNMS = (nmsValue.lowercased() != "false")
+        }
+
         // (3) Store model input size
         predictor.modelInputSize = predictor.getModelInputSize(for: mlModel)
 
         // (4) Create VNCoreMLModel, VNCoreMLRequest, etc.
         let coreMLModel = try VNCoreMLModel(for: mlModel)
-        coreMLModel.featureProvider = ThresholdProvider()
+        let iou = predictor.requiresNMS ? predictor.iouThreshold : 1.0
+        coreMLModel.featureProvider = ThresholdProvider(
+          iouThreshold: iou, confidenceThreshold: predictor.confidenceThreshold)
         predictor.detector = coreMLModel
         predictor.visionRequest = {
           let request = VNCoreMLRequest(
@@ -209,11 +226,31 @@ public class BasePredictor: Predictor, @unchecked Sendable {
   ///   - sampleBuffer: The camera frame buffer to process.
   ///   - onResultsListener: Optional listener to receive prediction results.
   ///   - onInferenceTime: Optional listener to receive performance metrics.
-  ///   - imageOrientation: The orientation of the image. Defaults to `.up`.
   public func predict(
-    sampleBuffer: CMSampleBuffer, onResultsListener: ResultsListener?,
+    sampleBuffer: CMSampleBuffer,
+    onResultsListener: ResultsListener?,
+    onInferenceTime: InferenceTimeListener?
+  ) {
+    predict(
+      sampleBuffer: sampleBuffer,
+      onResultsListener: onResultsListener,
+      onInferenceTime: onInferenceTime,
+      imageOrientation: .up
+    )
+  }
+
+  /// Processes a camera frame buffer with a specified orientation and delivers results via callbacks.
+  ///
+  /// - Parameters:
+  ///   - sampleBuffer: The camera frame buffer to process.
+  ///   - onResultsListener: Optional listener to receive prediction results.
+  ///   - onInferenceTime: Optional listener to receive performance metrics.
+  ///   - imageOrientation: The orientation of the image to pass to Vision.
+  public func predict(
+    sampleBuffer: CMSampleBuffer,
+    onResultsListener: ResultsListener?,
     onInferenceTime: InferenceTimeListener?,
-    imageOrientation: CGImagePropertyOrientation = .up
+    imageOrientation: CGImagePropertyOrientation
   ) {
     if currentBuffer == nil, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
       currentBuffer = pixelBuffer
@@ -221,20 +258,14 @@ public class BasePredictor: Predictor, @unchecked Sendable {
         width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
       currentOnResultsListener = onResultsListener
       currentOnInferenceTimeListener = onInferenceTime
-      //            currentOnFpsRateListener = onFpsRate
-
-      /// - Tag: MappingOrientation
-      // The frame is always oriented based on the camera sensor,
-      // so in most cases Vision needs to rotate it for the model to work as expected.
-      // let imageOrientation: CGImagePropertyOrientation = .up
 
       // Invoke a VNRequestHandler with that image
       let handler = VNImageRequestHandler(
         cvPixelBuffer: pixelBuffer, orientation: imageOrientation, options: [:])
       t0 = CACurrentMediaTime()  // inference start
       do {
-        if visionRequest != nil {
-          try handler.perform([visionRequest!])
+        if let request = visionRequest {
+          try handler.perform([request])
         }
       } catch {
         print(error)
@@ -255,6 +286,9 @@ public class BasePredictor: Predictor, @unchecked Sendable {
   /// - Parameter confidence: The new confidence threshold value (0.0 to 1.0).
   func setConfidenceThreshold(confidence: Double) {
     confidenceThreshold = confidence
+    let iou = requiresNMS ? iouThreshold : 1.0
+    detector?.featureProvider = ThresholdProvider(
+      iouThreshold: iou, confidenceThreshold: confidenceThreshold)
   }
 
   /// The IoU (Intersection over Union) threshold for non-maximum suppression (default: 0.7).
@@ -267,6 +301,9 @@ public class BasePredictor: Predictor, @unchecked Sendable {
   /// - Parameter iou: The new IoU threshold value (0.0 to 1.0).
   func setIouThreshold(iou: Double) {
     iouThreshold = iou
+    let effectiveIou = requiresNMS ? iouThreshold : 1.0
+    detector?.featureProvider = ThresholdProvider(
+      iouThreshold: effectiveIou, confidenceThreshold: confidenceThreshold)
   }
 
   /// The maximum number of detections to return in results (default: 30).
@@ -323,8 +360,8 @@ public class BasePredictor: Predictor, @unchecked Sendable {
     if let multiArrayConstraint = inputDescription.multiArrayConstraint {
       let shape = multiArrayConstraint.shape
       if shape.count >= 2 {
-        let height = shape[0].intValue
-        let width = shape[1].intValue
+        let height = shape[shape.count - 2].intValue
+        let width = shape[shape.count - 1].intValue
         return (width: width, height: height)
       }
     }

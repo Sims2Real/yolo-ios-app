@@ -38,10 +38,6 @@ public protocol InferenceTimeListener: AnyObject {
   ///   - fpsRate: The calculated frames per second rate based on recent inference times.
   func on(inferenceTime: Double, fpsRate: Double)
 }
-//
-//protocol FpsRateListener: AnyObject {
-//    func on(fpsRate: Double)
-//}
 
 /// Core protocol for YOLO model predictors.
 ///
@@ -55,7 +51,19 @@ public protocol Predictor {
   ///   - sampleBuffer: The camera frame buffer to process.
   ///   - onResultsListener: Optional listener to receive prediction results.
   ///   - onInferenceTime: Optional listener to receive performance metrics.
-  ///   - imageOrientation: The orientation of the image. Defaults to `.up`.
+  func predict(
+    sampleBuffer: CMSampleBuffer, onResultsListener: ResultsListener?,
+    onInferenceTime: InferenceTimeListener?)
+
+  /// Processes a camera frame buffer with a specified orientation.
+  ///
+  /// Default implementation ignores `imageOrientation` and calls `predict(sampleBuffer:onResultsListener:onInferenceTime:)`.
+  ///
+  /// - Parameters:
+  ///   - sampleBuffer: The camera frame buffer to process.
+  ///   - onResultsListener: Optional listener to receive prediction results.
+  ///   - onInferenceTime: Optional listener to receive performance metrics.
+  ///   - imageOrientation: The orientation of the image to pass to Vision.
   func predict(
     sampleBuffer: CMSampleBuffer, onResultsListener: ResultsListener?,
     onInferenceTime: InferenceTimeListener?,
@@ -74,20 +82,22 @@ public protocol Predictor {
   var isUpdating: Bool { get set }
 }
 
+public extension Predictor {
+  func predict(
+    sampleBuffer: CMSampleBuffer,
+    onResultsListener: ResultsListener?,
+    onInferenceTime: InferenceTimeListener?,
+    imageOrientation: CGImagePropertyOrientation
+  ) {
+    predict(sampleBuffer: sampleBuffer, onResultsListener: onResultsListener, onInferenceTime: onInferenceTime)
+  }
+}
+
 /// Errors that can occur during YOLO model prediction.
 ///
 /// This enumeration defines the different types of errors that may be encountered
 /// during model loading, configuration, and inference operations.
 enum PredictorError: Error {
-  /// The requested task type is not supported or invalid.
-  case invalidTask
-
-  /// No class labels were found for the model.
-  case noLabelsFound
-
-  /// The provided URL for model or resource loading is invalid.
-  case invalidUrl
-
   /// The model file could not be found at the specified location.
   case modelFileNotFound
 }
